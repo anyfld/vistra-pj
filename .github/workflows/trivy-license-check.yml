@@ -1,0 +1,34 @@
+name: Trivy License Check
+
+on:
+  workflow_call:
+    inputs:
+      image_name:
+        required: true
+        type: string
+      policy_path:
+        required: false
+        type: string
+        default: 'configs/policy/license.rego'
+
+permissions:
+  contents: read
+
+jobs:
+  trivy:
+    name: Trivy License Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Run Trivy License Check
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'image'
+          scan-ref: ${{ inputs.image_name }}
+          scanners: 'license'
+          ignore-policy: ${{ inputs.policy_path }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          exit-code: '1'
