@@ -87,6 +87,20 @@ runs:
         fi
       shell: bash
 
+    - name: Debug JSON Output
+      if: github.event_name == 'pull_request' && steps.trivy-json.outputs.results_file != ''
+      run: |
+        if [ -f "${{ steps.trivy-json.outputs.results_file }}" ]; then
+          echo "=== JSON file exists ==="
+          echo "File size: $(wc -c < "${{ steps.trivy-json.outputs.results_file }}") bytes"
+          echo "=== First 500 chars of JSON ==="
+          head -c 500 "${{ steps.trivy-json.outputs.results_file }}" || true
+          echo ""
+          echo "=== JSON structure check ==="
+          jq 'has("Results")' "${{ steps.trivy-json.outputs.results_file }}" || true
+        fi
+      shell: bash
+
     - name: Format License Results for Comment
       id: format-comment
       if: github.event_name == 'pull_request' && steps.trivy-json.outputs.results_file != ''
@@ -94,36 +108,44 @@ runs:
         if [ -f "${{ steps.trivy-json.outputs.results_file }}" ]; then
           # Extract license information from JSON and format as markdown table
           COMMENT=$(jq -r '
-            def format_licenses:
-              if .Results and (.Results | length > 0) then
+            def format_license_value(lic):
+              if lic | type == "string" then lic
+              elif lic | type == "object" then lic.Name // lic.name // "N/A"
+              else "N/A"
+              end;
+
+            if .Results and (.Results | length > 0) then
+              # Collect all packages with licenses
+              [.Results[] | .Packages[]? | select(.Licenses != null and (.Licenses | length > 0))] |
+              if length > 0 then
                 "## 📋 ライセンス情報\n\n" +
                 "<details>\n<summary>クリックしてライセンス情報を表示</summary>\n\n" +
                 "| パッケージ名 | バージョン | ライセンス |\n" +
                 "|------------|----------|----------|\n" +
                 (
-                  .Results[] |
-                  if .Packages then
-                    .Packages[] |
-                    select(.Licenses != null and (.Licenses | length > 0)) |
-                    "| \(.Name // "N/A") | \(.Version // "N/A") | \(.Licenses | join(", ")) |\n"
-                  elif .Licenses then
-                    .Licenses[] |
-                    "| \(.PkgName // .Name // "N/A") | \(.PkgVersion // .Version // "N/A") | \(.Name // "N/A") |\n"
-                  else
-                    empty
-                  end
+                  .[] |
+                  "| \(.Name // "N/A") | \(.Version // "N/A") | \(.Licenses | map(format_license_value(.)) | join(", ")) |\n"
                 ) +
                 "\n</details>"
               else
                 "## 📋 ライセンス情報\n\nライセンス情報が見つかりませんでした。"
-              end;
+              end
+            else
+              "## 📋 ライセンス情報\n\nライセンス情報が見つかりませんでした。"
+            end
+          ' "${{ steps.trivy-json.outputs.results_file }}" 2>&1)
 
-            format_licenses
-          ' "${{ steps.trivy-json.outputs.results_file }}" 2>/dev/null || echo "## 📋 ライセンス情報\n\nライセンス情報の取得中にエラーが発生しました。")
+          # Check if comment is empty or contains error
+          if [ -z "$COMMENT" ] || echo "$COMMENT" | grep -q "error\|Error\|parse error"; then
+            echo "Error parsing JSON or empty result"
+            echo "Comment content: $COMMENT"
+            COMMENT="## 📋 ライセンス情報\n\nライセンス情報の取得中にエラーが発生しました。\n\n\`\`\`\n$(head -c 1000 "${{ steps.trivy-json.outputs.results_file }}")\n\`\`\`"
+          fi
 
           # Save to file for multiline output
-          echo "$COMMENT" > license-comment.md
+          echo -e "$COMMENT" > license-comment.md
           echo "comment_file=license-comment.md" >> "$GITHUB_OUTPUT"
+          echo "Comment file created, size: $(wc -c < license-comment.md) bytes"
         fi
       shell: bash
 
