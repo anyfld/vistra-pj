@@ -4,8 +4,19 @@ on:
   workflow_call:
     inputs:
       image_name:
-        required: true
+        required: false
         type: string
+        description: 'Docker image name to scan. If not provided, filesystem scan will be performed.'
+      scan_ref:
+        required: false
+        type: string
+        default: '.'
+        description: 'Target to scan (image name or filesystem path). Default is current directory.'
+      scan_type:
+        required: false
+        type: string
+        default: 'fs'
+        description: 'Scan type: "image" or "fs". Default is "fs".'
       policy_repo:
         required: false
         type: string
@@ -34,11 +45,19 @@ jobs:
         id: set-policy-path
         run: |
           echo "path=policy/${{ inputs.policy_path }}" >> "$GITHUB_OUTPUT"
+      - name: Set Scan Target
+        id: set-scan-target
+        run: |
+          if [ "${{ inputs.scan_type }}" = "image" ] && [ -n "${{ inputs.image_name }}" ]; then
+            echo "target=${{ inputs.image_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "target=${{ inputs.scan_ref }}" >> "$GITHUB_OUTPUT"
+          fi
       - name: Run Trivy License Check
         uses: aquasecurity/trivy-action@master
         with:
-          scan-type: 'image'
-          scan-ref: ${{ inputs.image_name }}
+          scan-type: ${{ inputs.scan_type }}
+          scan-ref: ${{ steps.set-scan-target.outputs.target }}
           scanners: 'license'
           ignore-policy: ${{ steps.set-policy-path.outputs.path }}
           format: 'sarif'
