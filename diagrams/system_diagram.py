@@ -131,8 +131,8 @@ def draw_diagram(mode: str) -> None:
                     "カメラ本体\n(Autonomous Mode時の物理カメラ)",
                     camera_icon_path,
                 )
-                cd_auto = Tablet("CD (Autonomous)\n(Autonomous Mode時のキャプチャデバイス)")
-                co_auto = Server("CO (Autonomous)\n(Autonomous Mode時のカメラ用マイコン)")
+                cd_auto = Tablet("CD\n(Autonomous Mode時のキャプチャデバイス)")
+                co_auto = Server("CO\n(Autonomous Mode時のカメラ用マイコン)")
                 fd_auto = Python("FD (Autonomous)\n(Autonomous Mode時にカメラ側に常駐するFD)")
             else:
                 # Autonomous Mode のインフラ構成: Raspberry Pi + k3s と Arduino、
@@ -140,11 +140,11 @@ def draw_diagram(mode: str) -> None:
                 with Cluster("Raspberry Pi"):
                     _ = Server("raspberry pi")
                     _ = Server("k3s")
-                    _ = Tablet("CD (Autonomous)")
+                    _ = Tablet("CD")
                     _ = Python("FD (Autonomous)")
                 with Cluster("Arduino (Autonomous)"):
                     _ = Server("Arduino")
-                    _ = Server("CO (Autonomous)")
+                    _ = Server("CO")
 
         # Master MF
         with Cluster(
@@ -222,31 +222,37 @@ def draw_diagram(mode: str) -> None:
         # Lightweight Mode: FD → CO（制御信号）
         fd >> control_edge() >> co
 
+        # Lightweight Mode: FD → CD（制御信号）
+        fd >> control_edge() >> cd
+
         # --- カメラ (Autonomous Mode) の接続 ---
 
-        # カメラ本体 (Autonomous) → CD (Autonomous)（WebRTC(映像)）
+        # カメラ本体 (Autonomous) → CD（WebRTC(映像)）
         camera_body_auto >> webrtc_video_edge() >> cd_auto
 
-        # CD (Autonomous) → RS（WebRTC のシグナリング/TURN）
+        # CD → RS（WebRTC のシグナリング/TURN）
         cd_auto >> signaling_edge() >> rs
 
         # RS → FD (Autonomous)（WebRTC のシグナリング）
         rs >> signaling_edge(label="シグナリング") >> fd_auto
 
-        # CD (Autonomous) → MD, FD (Autonomous), EP（WebRTC・映像）
+        # CD → MD, FD (Autonomous), EP（WebRTC・映像）
         cd_auto >> webrtc_video_edge() >> md
         cd_auto >> webrtc_video_edge() >> fd_auto
         cd_auto >> webrtc_video_edge() >> ep
 
-        # CD (Autonomous), FD (Autonomous) → CR（Connect Protocol）
+        # CD, FD (Autonomous) → CR（Connect Protocol）
         cd_auto >> connect_edge() >> cr
         fd_auto >> connect_edge() >> cr
 
         # MD ↔ FD (Autonomous)（連携）
         md >> collaboration_edge(label="連携") >> fd_auto
 
-        # FD (Autonomous) → CO (Autonomous)（制御信号）
+        # FD (Autonomous) → CO（制御信号）
         fd_auto >> control_edge() >> co_auto
+
+        # FD (Autonomous) → CD（制御信号）
+        fd_auto >> control_edge() >> cd_auto
 
 
 if __name__ == "__main__":
