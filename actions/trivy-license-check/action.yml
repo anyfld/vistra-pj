@@ -48,6 +48,7 @@ runs:
       shell: bash
 
     - name: Run Trivy License Check
+      id: trivy-check
       uses: aquasecurity/trivy-action@master
       with:
         scan-type: ${{ inputs.scan_type }}
@@ -57,3 +58,80 @@ runs:
         format: 'sarif'
         output: 'trivy-results.sarif'
         exit-code: '1'
+      continue-on-error: true
+
+    - name: Install Trivy and jq
+      if: github.event_name == 'pull_request'
+      run: |
+        if ! command -v jq &> /dev/null; then
+          sudo apt-get update && sudo apt-get install -y jq
+        fi
+        if ! command -v trivy &> /dev/null; then
+          VERSION=$(curl -s https://api.github.com/repos/aquasecurity/trivy/releases/latest | jq -r '.tag_name' | sed 's/v//')
+          wget -qO - "https://github.com/aquasecurity/trivy/releases/download/v${VERSION}/trivy_${VERSION}_Linux-64bit.tar.gz" | tar -xz
+          sudo mv trivy /usr/local/bin/
+        fi
+      shell: bash
+
+    - name: Get Trivy License Results (JSON)
+      id: trivy-json
+      if: github.event_name == 'pull_request'
+      run: |
+        trivy ${{ inputs.scan_type }} \
+          --scanners license \
+          --ignore-policy ${{ steps.set-policy-path.outputs.path }} \
+          --format json \
+          --output trivy-results.json \
+          ${{ steps.set-scan-target.outputs.target }} || true
+        if [ -f trivy-results.json ]; then
+          echo "results_file=trivy-results.json" >> "$GITHUB_OUTPUT"
+        fi
+      shell: bash
+
+    - name: Format License Results for Comment
+      id: format-comment
+      if: github.event_name == 'pull_request' && steps.trivy-json.outputs.results_file != ''
+      run: |
+        if [ -f "${{ steps.trivy-json.outputs.results_file }}" ]; then
+          # Extract license information from JSON and format as markdown table
+          COMMENT=$(jq -r '
+            def format_licenses:
+              if .Results and (.Results | length > 0) then
+                "## 📋 ライセンス情報\n\n" +
+                "<details>\n<summary>クリックしてライセンス情報を表示</summary>\n\n" +
+                "| パッケージ名 | バージョン | ライセンス |\n" +
+                "|------------|----------|----------|\n" +
+                (
+                  .Results[] |
+                  if .Packages then
+                    .Packages[] |
+                    select(.Licenses != null and (.Licenses | length > 0)) |
+                    "| \(.Name // "N/A") | \(.Version // "N/A") | \(.Licenses | join(", ")) |\n"
+                  elif .Licenses then
+                    .Licenses[] |
+                    "| \(.PkgName // .Name // "N/A") | \(.PkgVersion // .Version // "N/A") | \(.Name // "N/A") |\n"
+                  else
+                    empty
+                  end
+                ) +
+                "\n</details>"
+              else
+                "## 📋 ライセンス情報\n\nライセンス情報が見つかりませんでした。"
+              end;
+
+            format_licenses
+          ' "${{ steps.trivy-json.outputs.results_file }}" 2>/dev/null || echo "## 📋 ライセンス情報\n\nライセンス情報の取得中にエラーが発生しました。")
+
+          # Save to file for multiline output
+          echo "$COMMENT" > license-comment.md
+          echo "comment_file=license-comment.md" >> "$GITHUB_OUTPUT"
+        fi
+      shell: bash
+
+    - name: Add PR Comment with License Information
+      if: github.event_name == 'pull_request' && steps.format-comment.outputs.comment_file != ''
+      uses: mshick/add-pr-comment@b8f338c590a895d50bcbfa6c5859251edc8952fc
+      with:
+        message-path: ${{ steps.format-comment.outputs.comment_file }}
+        message-id: trivy-license-check
+        allow-repeats: true
