@@ -6,10 +6,15 @@ on:
       image_name:
         required: true
         type: string
+      policy_repo:
+        required: false
+        type: string
+        description: 'Policy repository (e.g., org/common-policies). If not provided, uses anyfld/vistra-pj.'
       policy_path:
         required: false
         type: string
         default: 'configs/policy/license.rego'
+        description: 'Path to policy file within the policy repository.'
 
 permissions:
   contents: read
@@ -20,15 +25,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout
+      - name: Checkout Policy Repository
         uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.policy_repo || 'anyfld/vistra-pj' }}
+          path: policy
+      - name: Set Policy Path
+        id: set-policy-path
+        run: |
+          echo "path=policy/${{ inputs.policy_path }}" >> "$GITHUB_OUTPUT"
       - name: Run Trivy License Check
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'image'
           scan-ref: ${{ inputs.image_name }}
           scanners: 'license'
-          ignore-policy: ${{ inputs.policy_path }}
+          ignore-policy: ${{ steps.set-policy-path.outputs.path }}
           format: 'sarif'
           output: 'trivy-results.sarif'
           exit-code: '1'
