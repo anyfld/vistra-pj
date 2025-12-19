@@ -93,14 +93,18 @@ runs:
         if [ -f "${{ steps.trivy-json.outputs.results_file }}" ]; then
           echo "=== JSON file exists ==="
           echo "File size: $(wc -c < "${{ steps.trivy-json.outputs.results_file }}") bytes"
-          echo "=== JSON structure check ==="
-          jq 'has("Results")' "${{ steps.trivy-json.outputs.results_file }}" || true
           echo "=== Results count ==="
           jq '.Results | length' "${{ steps.trivy-json.outputs.results_file }}" || true
           echo "=== Packages count ==="
           jq '[.Results[] | .Packages[]?] | length' "${{ steps.trivy-json.outputs.results_file }}" || true
-          echo "=== Sample package structure ==="
-          jq '.Results[0].Packages[0] // empty' "${{ steps.trivy-json.outputs.results_file }}" || true
+          echo "=== Licenses array exists in Results ==="
+          jq '[.Results[] | has("Licenses")]' "${{ steps.trivy-json.outputs.results_file }}" || true
+          echo "=== Licenses count in Results ==="
+          jq '[.Results[] | .Licenses[]?] | length' "${{ steps.trivy-json.outputs.results_file }}" || true
+          echo "=== Sample license structure ==="
+          jq '.Results[0].Licenses[0] // empty' "${{ steps.trivy-json.outputs.results_file }}" || true
+          echo "=== Packages with Licenses field ==="
+          jq '[.Results[] | .Packages[]? | select(has("Licenses"))] | length' "${{ steps.trivy-json.outputs.results_file }}" || true
         fi
       shell: bash
 
@@ -110,36 +114,55 @@ runs:
       run: |
         if [ -f "${{ steps.trivy-json.outputs.results_file }}" ]; then
           # Extract license information from JSON and format as markdown table
+          # Try multiple approaches to extract license information
           COMMENT=$(jq -r '
-            def format_license_value(lic):
+            def format_license_name(lic):
               if lic | type == "string" then lic
               elif lic | type == "object" then lic.Name // lic.name // "N/A"
               else "N/A"
               end;
 
-            # Collect all packages with licenses from all results
-            [.Results[]? | .Packages[]? | select(.Licenses != null and (.Licenses | length > 0))] |
-            if length > 0 then
+            # Approach 1: Get licenses from Results[].Licenses[] array (most common structure)
+            [.Results[]? | .Licenses[]?] as $licenses |
+            [.Results[]? | .Packages[]?] as $packages |
+
+            if ($licenses | length > 0) then
+              # Group licenses by package name
               "## 📋 ライセンス情報\n\n" +
               "<details>\n<summary>クリックしてライセンス情報を表示</summary>\n\n" +
               "| パッケージ名 | バージョン | ライセンス |\n" +
               "|------------|----------|----------|\n" +
               (
+                $packages | unique_by(.Name) |
                 .[] |
-                "| \(.Name // "N/A") | \(.Version // "N/A") | \(.Licenses | map(format_license_value(.)) | join(", ")) |\n"
+                . as $pkg |
+                ($licenses | map(select((.Package // .package // "") == ($pkg.Name // ""))) | map(format_license_name(.)) | unique) as $pkg_lics |
+                if ($pkg_lics | length > 0) then
+                  "| \($pkg.Name // "N/A") | \($pkg.Version // "N/A") | \($pkg_lics | join(", ")) |\n"
+                else
+                  empty
+                end
+              ) +
+              "\n</details>"
+            # Approach 2: Get licenses from Packages[].Licenses field
+            elif [.Results[]? | .Packages[]? | select(.Licenses != null and (.Licenses | length > 0))] | length > 0 then
+              "## 📋 ライセンス情報\n\n" +
+              "<details>\n<summary>クリックしてライセンス情報を表示</summary>\n\n" +
+              "| パッケージ名 | バージョン | ライセンス |\n" +
+              "|------------|----------|----------|\n" +
+              (
+                .Results[]? | .Packages[]? |
+                select(.Licenses != null and (.Licenses | length > 0)) |
+                "| \(.Name // "N/A") | \(.Version // "N/A") | \(.Licenses | map(format_license_name(.)) | join(", ")) |\n"
               ) +
               "\n</details>"
             else
-              "## 📋 ライセンス情報\n\nライセンス情報が見つかりませんでした。\n\n" +
-              "JSON構造:\n" +
-              "```json\n" +
-              "Results count: " + (.Results | length | tostring) + "\n" +
-              "```"
+              "## 📋 ライセンス情報\n\nライセンス情報が見つかりませんでした。"
             end
           ' "${{ steps.trivy-json.outputs.results_file }}" 2>&1)
 
           # Check if comment is empty or contains error
-          if [ -z "$COMMENT" ] || echo "$COMMENT" | grep -q "error\|Error\|parse error"; then
+          if [ -z "$COMMENT" ] || echo "$COMMENT" | grep -q "error\|Error\|parse error\|jq:"; then
             echo "Error parsing JSON or empty result"
             echo "Comment content: $COMMENT"
             COMMENT="## 📋 ライセンス情報\n\nライセンス情報の取得中にエラーが発生しました。\n\n\`\`\`json\n$(head -c 2000 "${{ steps.trivy-json.outputs.results_file }}")\n\`\`\`"
