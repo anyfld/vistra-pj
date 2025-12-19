@@ -18,6 +18,7 @@ jobs:
       - format-check
       - find-projects
       - type-check
+      - license-check
     steps:
       - uses: actions/checkout@v5
       - name: Check all-status-check
@@ -78,3 +79,17 @@ jobs:
         run: uv sync --dev
       - name: Run Type Checker
         run: uvx ty check
+
+  license-check:
+    name: License Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./actions/trivy-license-check
+        with:
+          scan_type: 'fs'
+          scan_ref: '.'
