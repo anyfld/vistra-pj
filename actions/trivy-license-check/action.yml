@@ -76,9 +76,9 @@ runs:
       id: trivy-json
       if: github.event_name == 'pull_request'
       run: |
+        # Get all license information without policy filtering for comment display
         trivy ${{ inputs.scan_type }} \
           --scanners license \
-          --ignore-policy ${{ steps.set-policy-path.outputs.path }} \
           --format json \
           --output trivy-results.json \
           ${{ steps.set-scan-target.outputs.target }} || true
@@ -93,11 +93,14 @@ runs:
         if [ -f "${{ steps.trivy-json.outputs.results_file }}" ]; then
           echo "=== JSON file exists ==="
           echo "File size: $(wc -c < "${{ steps.trivy-json.outputs.results_file }}") bytes"
-          echo "=== First 500 chars of JSON ==="
-          head -c 500 "${{ steps.trivy-json.outputs.results_file }}" || true
-          echo ""
           echo "=== JSON structure check ==="
           jq 'has("Results")' "${{ steps.trivy-json.outputs.results_file }}" || true
+          echo "=== Results count ==="
+          jq '.Results | length' "${{ steps.trivy-json.outputs.results_file }}" || true
+          echo "=== Packages count ==="
+          jq '[.Results[] | .Packages[]?] | length' "${{ steps.trivy-json.outputs.results_file }}" || true
+          echo "=== Sample package structure ==="
+          jq '.Results[0].Packages[0] // empty' "${{ steps.trivy-json.outputs.results_file }}" || true
         fi
       shell: bash
 
@@ -114,24 +117,24 @@ runs:
               else "N/A"
               end;
 
-            if .Results and (.Results | length > 0) then
-              # Collect all packages with licenses
-              [.Results[] | .Packages[]? | select(.Licenses != null and (.Licenses | length > 0))] |
-              if length > 0 then
-                "## 📋 ライセンス情報\n\n" +
-                "<details>\n<summary>クリックしてライセンス情報を表示</summary>\n\n" +
-                "| パッケージ名 | バージョン | ライセンス |\n" +
-                "|------------|----------|----------|\n" +
-                (
-                  .[] |
-                  "| \(.Name // "N/A") | \(.Version // "N/A") | \(.Licenses | map(format_license_value(.)) | join(", ")) |\n"
-                ) +
-                "\n</details>"
-              else
-                "## 📋 ライセンス情報\n\nライセンス情報が見つかりませんでした。"
-              end
+            # Collect all packages with licenses from all results
+            [.Results[]? | .Packages[]? | select(.Licenses != null and (.Licenses | length > 0))] |
+            if length > 0 then
+              "## 📋 ライセンス情報\n\n" +
+              "<details>\n<summary>クリックしてライセンス情報を表示</summary>\n\n" +
+              "| パッケージ名 | バージョン | ライセンス |\n" +
+              "|------------|----------|----------|\n" +
+              (
+                .[] |
+                "| \(.Name // "N/A") | \(.Version // "N/A") | \(.Licenses | map(format_license_value(.)) | join(", ")) |\n"
+              ) +
+              "\n</details>"
             else
-              "## 📋 ライセンス情報\n\nライセンス情報が見つかりませんでした。"
+              "## 📋 ライセンス情報\n\nライセンス情報が見つかりませんでした。\n\n" +
+              "JSON構造:\n" +
+              "```json\n" +
+              "Results count: " + (.Results | length | tostring) + "\n" +
+              "```"
             end
           ' "${{ steps.trivy-json.outputs.results_file }}" 2>&1)
 
@@ -139,7 +142,7 @@ runs:
           if [ -z "$COMMENT" ] || echo "$COMMENT" | grep -q "error\|Error\|parse error"; then
             echo "Error parsing JSON or empty result"
             echo "Comment content: $COMMENT"
-            COMMENT="## 📋 ライセンス情報\n\nライセンス情報の取得中にエラーが発生しました。\n\n\`\`\`\n$(head -c 1000 "${{ steps.trivy-json.outputs.results_file }}")\n\`\`\`"
+            COMMENT="## 📋 ライセンス情報\n\nライセンス情報の取得中にエラーが発生しました。\n\n\`\`\`json\n$(head -c 2000 "${{ steps.trivy-json.outputs.results_file }}")\n\`\`\`"
           fi
 
           # Save to file for multiline output
