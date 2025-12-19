@@ -1,11 +1,10 @@
 from diagrams import Diagram, Cluster, Edge
 from diagrams.custom import Custom
-from diagrams.generic.device import Mobile, Tablet
+from diagrams.generic.device import Tablet
 from diagrams.onprem.client import User, Client
 from diagrams.onprem.compute import Server
 from diagrams.programming.language import Python, Go
 from diagrams.programming.framework import React
-from diagrams.generic.blank import Blank
 import os
 
 # グラフの属性設定
@@ -117,9 +116,9 @@ def draw_diagram(mode: str) -> None:
                 co = Server("CO\n(PTZやアームを物理制御するカメラ用マイコン)")
             else:
                 with Cluster("Arduino (Lightweight)"):
-                    arduino_light = Server("Arduino")
-                    cd_light = Tablet("CD")
-                    co_light = Server("CO")
+                    _ = Server("Arduino")
+                    _ = Tablet("CD")
+                    _ = Server("CO")
 
         # カメラ (Autonomous Mode)
         with Cluster(
@@ -139,13 +138,13 @@ def draw_diagram(mode: str) -> None:
                 # Autonomous Mode のインフラ構成: Raspberry Pi + k3s と Arduino、
                 # それぞれの中に対応するサービスをアイコンごと配置
                 with Cluster("Raspberry Pi"):
-                    rasp = Server("raspberry pi")
-                    k3s = Server("k3s")
-                    cd_auto_svc = Tablet("CD (Autonomous)")
-                    fd_auto_svc = Python("FD (Autonomous)")
+                    _ = Server("raspberry pi")
+                    _ = Server("k3s")
+                    _ = Tablet("CD (Autonomous)")
+                    _ = Python("FD (Autonomous)")
                 with Cluster("Arduino (Autonomous)"):
-                    arduino_auto = Server("Arduino")
-                    co_auto_svc = Server("CO (Autonomous)")
+                    _ = Server("Arduino")
+                    _ = Server("CO (Autonomous)")
 
         # Master MF
         with Cluster(
@@ -162,12 +161,12 @@ def draw_diagram(mode: str) -> None:
             else:
                 # Master MF を k8s クラスタとして表現し、その中にサービス群を配置
                 with Cluster("k8s Cluster (Master MF)"):
-                    k8s_cluster = Server("k8s Node(s)")
-                    cr_svc = Go("CR")
-                    rs_svc = Server("RS")
-                    ep_svc = React("EP")
-                    md_svc = Python("MD")
-                    fd_svc = Python("FD")
+                    _ = Server("k8s Node(s)")
+                    _ = Go("CR")
+                    _ = Server("RS")
+                    _ = React("EP")
+                    _ = Python("MD")
+                    _ = Python("FD")
 
         # 配信PC
         with Cluster("配信PC"):
