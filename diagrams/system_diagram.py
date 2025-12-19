@@ -39,7 +39,9 @@ def webrtc_edge(label: str = "WebRTC") -> Edge:
 
 def signaling_edge(label: str = "シグナリング/TURN") -> Edge:
     """WebRTC のシグナリングや TURN など制御信号（オレンジ・点線）"""
-    return Edge(label=label, color="#ff7f0e", fontcolor="#ff7f0e", style="dashed", penwidth="2")
+    return Edge(
+        label=label, color="#ff7f0e", fontcolor="#ff7f0e", style="dashed", penwidth="2"
+    )
 
 
 def webrtc_video_edge(label: str = "WebRTC(映像)") -> Edge:
@@ -56,14 +58,20 @@ def connect_edge(label: str = "Connect Protocol") -> Edge:
     """Connect Protocol による制御/通信路（ティール系の実線）"""
     return Edge(label=label, color="#17becf", fontcolor="#17becf", penwidth="2")
 
+
 def operation_edge(label: str = "操作") -> Edge:
     """ユーザー操作系の線（緑・点線）"""
-    return Edge(label=label, color="#2ca02c", fontcolor="#2ca02c", style="dashed", penwidth="2")
+    return Edge(
+        label=label, color="#2ca02c", fontcolor="#2ca02c", style="dashed", penwidth="2"
+    )
 
 
 def collaboration_edge(label: str = "連携") -> Edge:
     """相互連携を示す線（緑・実線・両端矢印）"""
-    return Edge(label=label, color="#2ca02c", fontcolor="#2ca02c", penwidth="2", dir="both")
+    return Edge(
+        label=label, color="#2ca02c", fontcolor="#2ca02c", penwidth="2", dir="both"
+    )
+
 
 # 出力ディレクトリを作成（絶対パスで指定して Graphviz の cwd 問題を回避）
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -131,9 +139,15 @@ def draw_diagram(mode: str) -> None:
                     "カメラ本体\n(Autonomous Mode時の物理カメラ)",
                     camera_icon_path,
                 )
-                cd_auto = Tablet("CD\n(Autonomous Mode時のキャプチャデバイス)")
-                co_auto = Server("CO\n(Autonomous Mode時のカメラ用マイコン)")
-                fd_auto = Python("FD (Autonomous)\n(Autonomous Mode時にカメラ側に常駐するFD)")
+                cd_auto = Tablet(
+                    "CD (Autonomous)\n(Autonomous Mode時のキャプチャデバイス)"
+                )
+                co_auto = Server(
+                    "CO (Autonomous)\n(Autonomous Mode時のカメラ用マイコン)"
+                )
+                fd_auto = Python(
+                    "FD (Autonomous)\n(Autonomous Mode時にカメラ側に常駐するFD)"
+                )
             else:
                 # Autonomous Mode のインフラ構成: Raspberry Pi + k3s と Arduino、
                 # それぞれの中に対応するサービスをアイコンごと配置
@@ -156,8 +170,12 @@ def draw_diagram(mode: str) -> None:
                 cr = Go("CR\n(全ての通信を統括する本当のマスタサーバ)")
                 rs = Server("RS\n(WebRTCのマスター兼中継を行うリレーステーション)")
                 ep = React("EP\n(MDを制御するブラウザUIシステム)")
-                md = Python("MD\n(シネマトグラフィー管理と配信を司るメインディレクター)")
-                fd = Python("FD\n(MDの指示から画角を計算しCOを制御するフィルムディレクター)")
+                md = Python(
+                    "MD\n(シネマトグラフィー管理と配信を司るメインディレクター)"
+                )
+                fd = Python(
+                    "FD\n(MDの指示から画角を計算しCOを制御するフィルムディレクター)"
+                )
             else:
                 # Master MF を k8s クラスタとして表現し、その中にサービス群を配置
                 with Cluster("k8s Cluster (Master MF)"):
@@ -259,4 +277,3 @@ if __name__ == "__main__":
     # app（論理図）と infra（インフラ図）の2種類を同時に出力
     for mode in ("app", "infra"):
         draw_diagram(mode)
-

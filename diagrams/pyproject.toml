@@ -1,0 +1,14 @@
+[project]
+name = "vistra-diagrams"
+version = "0.1.0"
+description = "System diagram generation"
+requires-python = ">=3.8"
+dependencies = [
+    "diagrams>=0.23.4",
+]
+
+[project.optional-dependencies]
+dev = []
+
+[tool.ty.rules]
+invalid-argument-type = "ignore"
