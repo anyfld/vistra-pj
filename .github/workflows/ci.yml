@@ -81,7 +81,12 @@ jobs:
         run: uvx ty check
 
   license-check:
-    uses: ./.github/workflows/trivy-license-check.yml
-    with:
-      scan_type: 'fs'
-      scan_ref: '.'
+    name: License Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./actions/trivy-license-check
+        with:
+          scan_type: 'fs'
+          scan_ref: '.'

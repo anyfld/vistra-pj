@@ -1,0 +1,59 @@
+name: 'Trivy License Check'
+description: 'Check licenses using Trivy with custom policy'
+
+inputs:
+  image_name:
+    description: 'Docker image name to scan. If not provided, filesystem scan will be performed.'
+    required: false
+  scan_ref:
+    description: 'Target to scan (image name or filesystem path). Default is current directory.'
+    required: false
+    default: '.'
+  scan_type:
+    description: 'Scan type: "image" or "fs". Default is "fs".'
+    required: false
+    default: 'fs'
+  policy_repo:
+    description: 'Policy repository (e.g., org/common-policies). If not provided, uses anyfld/vistra-pj.'
+    required: false
+  policy_path:
+    description: 'Path to policy file within the policy repository.'
+    required: false
+    default: 'configs/policy/license.rego'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout Policy Repository
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ inputs.policy_repo || 'anyfld/vistra-pj' }}
+        path: policy
+      shell: bash
+
+    - name: Set Policy Path
+      id: set-policy-path
+      run: |
+        echo "path=policy/${{ inputs.policy_path }}" >> "$GITHUB_OUTPUT"
+      shell: bash
+
+    - name: Set Scan Target
+      id: set-scan-target
+      run: |
+        if [ "${{ inputs.scan_type }}" = "image" ] && [ -n "${{ inputs.image_name }}" ]; then
+          echo "target=${{ inputs.image_name }}" >> "$GITHUB_OUTPUT"
+        else
+          echo "target=${{ inputs.scan_ref }}" >> "$GITHUB_OUTPUT"
+        fi
+      shell: bash
+
+    - name: Run Trivy License Check
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: ${{ inputs.scan_type }}
+        scan-ref: ${{ steps.set-scan-target.outputs.target }}
+        scanners: 'license'
+        ignore-policy: ${{ steps.set-policy-path.outputs.path }}
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        exit-code: '1'
