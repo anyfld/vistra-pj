@@ -29,7 +29,6 @@ runs:
       with:
         repository: ${{ inputs.policy_repo || 'anyfld/vistra-pj' }}
         path: policy
-      shell: bash
 
     - name: Set Policy Path
       id: set-policy-path
